@@ -1,57 +1,63 @@
 name: Build APK
 
 on:
-  workflow_dispatch:  # Allows manual triggering from GitHub Actions
+  workflow_dispatch:  # Allows manual triggering
   push:
     branches:
-      - main  # Runs when pushing to the main branch
+      - main  # Runs when changes are pushed to 'main' branch
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Use the latest Ubuntu runner
+    runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
+    - name: 🛠️ Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: 🛠️ Set Up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+    - name: 🔄 Set Up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
 
-      - name: 🛠️ Install System Dependencies
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt update
-          sudo apt install -y git zip unzip make automake autoconf libtool \
-                              pkg-config python3 python3-pip python3-setuptools \
-                              openjdk-17-jdk ant wget libncurses5 libncursesw5 \
-                              libstdc++6 gcc python3-venv
+    - name: 🔍 Install System Dependencies
+      run: |
+        sudo apt update && sudo apt install -y \
+          build-essential \
+          python3-pip \
+          python3-venv \
+          openjdk-17-jdk \
+          libssl-dev \
+          zlib1g-dev \
+          libffi-dev \
+          libsqlite3-dev \
+          libncurses5 \
+          libncursesw5 \
+          git
 
-      - name: 🔽 Install Buildozer & Dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install --upgrade Cython virtualenv
-          pip install buildozer
-        
-      - name: 🔧 Initialize Buildozer (If Needed)
-        run: |
-          if [ ! -f buildozer.spec ]; then
-            buildozer init
-          else
-            echo "buildozer.spec already exists, skipping initialization."
-          fi
+    - name: 🏗️ Install Buildozer & Dependencies
+      run: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install buildozer cython
+        buildozer version  # Check if Buildozer installed correctly
 
-      - name: 🔄 Fix Permissions (Avoid Execution Errors)
-        run: |
-          chmod +x .github/workflows/build_apk.yml || true
+    - name: 📁 Initialize Buildozer (If Missing)
+      run: |
+        if [ ! -f "buildozer.spec" ]; then
+          buildozer init
+        fi
 
-      - name: 🚀 Build APK
-        run: |
-          buildozer android debug || { echo "⚠️ Build failed, retrying..."; sleep 10; buildozer android debug; }
+    - name: 🚀 Build APK (With Error Handling)
+      run: |
+        source venv/bin/activate
+        for attempt in {1..3}; do  # Retry 3 times if failed
+          echo "Attempt $attempt to build APK..."
+          buildozer -v android debug && break || sleep 10
+        done
 
-      - name: 📤 Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Built-APK
-          path: bin/*.apk
+    - name: 🗃️ Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PrankApp-APK
+        path: bin/*.apk
